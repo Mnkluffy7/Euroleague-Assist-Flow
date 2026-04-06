@@ -21,7 +21,7 @@ TEAM_COLORS = [
 # LOAD DATA
 # ============================================================
 @st.cache_data
-def load_data(file):
+def load_data():
     df = pd.read_excel("assist_flow.xlsx")
     df = df.rename(columns={
         "PLAYER"         : "assister",
@@ -127,81 +127,71 @@ def plot_sankey(df, team, mode, round_val):
 st.title("🏀 Euroleague Assist Flow")
 st.markdown("---")
 
-#uploaded_file = st.file_uploader("assist_flow", type=["xlsx"])
 df = load_data()
 
-if uploaded_file:
-    df = load_data(uploaded_file)
+with st.sidebar:
+    st.header("Φίλτρα")
 
-    with st.sidebar:
-        st.header("Φίλτρα")
+    seasons = sorted(df["Season"].unique())
+    season = st.selectbox("Season", seasons, index=len(seasons)-1)
 
-        seasons = sorted(df["Season"].unique())
-        season = st.selectbox("Season", seasons, index=len(seasons)-1)
+    phases = sorted(df[df["Season"] == season]["Phase"].unique())
+    phase = st.selectbox("Phase", phases)
 
-        phases = sorted(df[df["Season"] == season]["Phase"].unique())
-        phase = st.selectbox("Phase", phases)
+    df_filtered = df[(df["Season"] == season) & (df["Phase"] == phase)]
 
-        df_filtered = df[(df["Season"] == season) & (df["Phase"] == phase)]
+    teams = sorted(df_filtered["team"].unique())
+    team = st.selectbox("Ομάδα", teams)
 
-        teams = sorted(df_filtered["team"].unique())
-        team = st.selectbox("Ομάδα", teams)
+    rounds = sorted(df_filtered["Round"].unique())
+    round_val = st.select_slider("Αγωνιστική", options=rounds)
 
-        rounds = sorted(df_filtered["Round"].unique())
-        round_val = st.select_slider("Αγωνιστική", options=rounds)
+    mode = st.radio("Τρόπος εμφάνισης", ["Per Round", "Cumulative"])
 
-        mode = st.radio("Τρόπος εμφάνισης", ["Per Round", "Cumulative"])
+result = plot_sankey(df_filtered, team, mode, round_val)
 
-    result = plot_sankey(df_filtered, team, mode, round_val)
+if result:
+    fig, rows, assister_totals, scorer_totals = result
 
-    if result:
-        fig, rows, assister_totals, scorer_totals = result
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Συνολικές Assists", len(rows))
+    col2.metric("Top Assister", assister_totals.index[0], f"{int(assister_totals.iloc[0])} ast")
+    col3.metric("Top Scorer (από assist)", scorer_totals.index[0], f"{int(scorer_totals.iloc[0])} buckets")
+    col4.metric("Παίκτες εμπλεκόμενοι", len(set(rows["assister"]) | set(rows["scorer"])))
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Συνολικές Assists", len(rows))
-        col2.metric("Top Assister", assister_totals.index[0], f"{int(assister_totals.iloc[0])} ast")
-        col3.metric("Top Scorer (από assist)", scorer_totals.index[0], f"{int(scorer_totals.iloc[0])} buckets")
-        col4.metric("Παίκτες εμπλεκόμενοι", len(set(rows["assister"]) | set(rows["scorer"])))
+    st.plotly_chart(fig, use_container_width=True)
 
-        st.plotly_chart(fig, use_container_width=True)
+    with st.expander("Αναλυτικός πίνακας assists"):
+        agg_table = rows.groupby(["assister", "scorer"]).size().reset_index(name="count")
+        agg_table = agg_table.sort_values("count", ascending=False)
+        st.dataframe(agg_table, use_container_width=True, hide_index=True)
 
-        with st.expander("Αναλυτικός πίνακας assists"):
-            agg_table = rows.groupby(["assister", "scorer"]).size().reset_index(name="count")
-            agg_table = agg_table.sort_values("count", ascending=False)
-            st.dataframe(agg_table, use_container_width=True, hide_index=True)
-        with st.expander("Top 5 ζεύγη — Ανάλυση τύπου πάσας"):
-            # Top 5 ζεύγη assister→scorer
-            pairs = (
-                rows.groupby(["assister", "scorer"])
-                .size()
-                .sort_values(ascending=False)
-                .head(5)
-                .reset_index(name="Σύνολο")
-            )
-        
-            # Για κάθε ζεύγος, ανάλυση ανά pts
-            breakdown_rows = []
-            for _, pair in pairs.iterrows():
-                mask = (rows["assister"] == pair["assister"]) & (rows["scorer"] == pair["scorer"])
-                pair_rows = rows[mask]
-                pts_counts = pair_rows["pts"].value_counts().to_dict()
-        
-                breakdown_rows.append({
-                    "Assister"  : pair["assister"],
-                    "Scorer"    : pair["scorer"],
-                    "Σύνολο"    : pair["Σύνολο"],
-                    "1pt (FT)"  : int(pts_counts.get(1, 0)),
-                    "2pt"       : int(pts_counts.get(2, 0)),
-                    "3pt"       : int(pts_counts.get(3, 0)),
-                })
-        
-            result_df = pd.DataFrame(breakdown_rows)
-        
-            # Ποσοστά
-            result_df["2pt %"] = (result_df["2pt"] / result_df["Σύνολο"] * 100).round(1).astype(str) + "%"
-            result_df["3pt %"] = (result_df["3pt"] / result_df["Σύνολο"] * 100).round(1).astype(str) + "%"
-        
-            st.dataframe(result_df, use_container_width=True, hide_index=True)
+    with st.expander("Top 5 ζεύγη — Ανάλυση τύπου πάσας"):
+        pairs = (
+            rows.groupby(["assister", "scorer"])
+            .size()
+            .sort_values(ascending=False)
+            .head(5)
+            .reset_index(name="Σύνολο")
+        )
 
-else:
-    st.info("Ανέβασε το Excel αρχείο για να ξεκινήσεις.")
+        breakdown_rows = []
+        for _, pair in pairs.iterrows():
+            mask = (rows["assister"] == pair["assister"]) & (rows["scorer"] == pair["scorer"])
+            pair_rows = rows[mask]
+            pts_counts = pair_rows["pts"].value_counts().to_dict()
+
+            breakdown_rows.append({
+                "Assister" : pair["assister"],
+                "Scorer"   : pair["scorer"],
+                "Σύνολο"   : pair["Σύνολο"],
+                "1pt (FT)" : int(pts_counts.get(1, 0)),
+                "2pt"      : int(pts_counts.get(2, 0)),
+                "3pt"      : int(pts_counts.get(3, 0)),
+            })
+
+        result_df = pd.DataFrame(breakdown_rows)
+        result_df["2pt %"] = (result_df["2pt"] / result_df["Σύνολο"] * 100).round(1).astype(str) + "%"
+        result_df["3pt %"] = (result_df["3pt"] / result_df["Σύνολο"] * 100).round(1).astype(str) + "%"
+
+        st.dataframe(result_df, use_container_width=True, hide_index=True)
