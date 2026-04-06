@@ -22,7 +22,7 @@ TEAM_COLORS = [
 # ============================================================
 @st.cache_data
 def load_data(file):
-    df = pd.read_excel(file)
+    df = pd.read_excel("assist_flow.xlsx")
     df = df.rename(columns={
         "PLAYER"         : "assister",
         "matched_PLAYER" : "scorer",
