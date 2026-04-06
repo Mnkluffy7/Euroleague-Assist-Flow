@@ -127,7 +127,8 @@ def plot_sankey(df, team, mode, round_val):
 st.title("🏀 Euroleague Assist Flow")
 st.markdown("---")
 
-uploaded_file = st.file_uploader("assist_flow", type=["xlsx"])
+#uploaded_file = st.file_uploader("assist_flow", type=["xlsx"])
+df = load_data()
 
 if uploaded_file:
     df = load_data(uploaded_file)
